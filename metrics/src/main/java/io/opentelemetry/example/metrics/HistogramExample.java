@@ -4,11 +4,16 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.DoubleHistogramBuilder;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.extension.incubator.metrics.ExtendedLongHistogramBuilder;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
+import io.opentelemetry.sdk.metrics.*;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -34,6 +39,7 @@ public class HistogramExample {
     Meter meter = otel.getMeter("io.opentelemetry.example.metrics");
     exampleWithDefaultBuckets(meter);
     exampleWithCustomBuckets(meter);
+    exampleWithExponentialBuckets();
   }
 
   /**
@@ -69,6 +75,22 @@ public class HistogramExample {
             .setUnit("years")
             .build();
     addDataToHistogram(histogram);
+  }
+
+  void exampleWithExponentialBuckets() {
+    OpenTelemetry sdk = AutoConfiguredOpenTelemetrySdk.builder()
+            .addMeterProviderCustomizer((b, c) ->
+              b.registerView(
+                      InstrumentSelector.builder().setType(InstrumentType.HISTOGRAM).build(),
+                      View.builder()
+                              .setAggregation(Aggregation.base2ExponentialBucketHistogram(1, 20))
+                              .build())
+            ).build().getOpenTelemetrySdk();
+
+    Meter meter = sdk.getMeter(HistogramExample.class.getName());
+    DoubleHistogram histogram = meter.histogramBuilder("bug").build();
+    histogram.record(1);
+    histogram.record(10); // program will go into an infinite loop in DoubleBase2ExponentialHistogramBuckets.getScaleReduction
   }
 
   void addDataToHistogram(LongHistogram histogram) {
